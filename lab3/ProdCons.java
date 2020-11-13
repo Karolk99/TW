@@ -1,31 +1,31 @@
 package lab3;
 
-import java.util.LinkedList;
-import java.util.Queue;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class ProdCons {
+class ProdCons {
     private int max;
-    private Queue<Integer> queue = new LinkedList<>();
+    private int queue;
     private ReentrantLock lock = new ReentrantLock(true);
     private Condition notEmpty = lock.newCondition();
     private Condition notFull = lock.newCondition();
 
-    public ProdCons(int size){
-        //this.queue = new LinkedList<>();
+    ProdCons(int size){
         this.max = size;
+        this.queue = 0;
     }
 
-    public void put(int amount){
+    void put(Producer prod){
         lock.lock();
         try{
-            while( queue.size() + amount > max) {
+            while(queue + prod.amount > max) {
+                if(!Source.work)
+                    return;
                 notFull.await();
             }
-            for(int i = 0; i < amount; i++)
-                queue.add(1);
+            queue += prod.amount;
             notEmpty.signalAll();
+            prod.op++;
         } catch (InterruptedException e) {
             e.printStackTrace();
         } finally {
@@ -33,19 +33,33 @@ public class ProdCons {
         }
     }
 
-    public void take(int amount) {
+    void take(Consumer cons) {
         lock.lock();
         try{
-            while(queue.size() - amount < 0){
+            while(queue - cons.amount < 0){
+                if(!Source.work)
+                    return;
                 notEmpty.await();
             }
-            for(int i = 0; i < amount; i++)
-               queue.remove();
+            queue -= cons.amount;
             notFull.signalAll();
+            cons.op++;
         } catch (InterruptedException e) {
             e.printStackTrace();
         }   finally {
             lock.unlock();
         }
+    }
+
+    void restartQueue() {
+        this.queue = 0;
+    }
+
+    void endQueue() {
+        Source.work = false;
+        lock.lock();
+            notFull.signalAll();
+            notEmpty.signalAll();
+        lock.unlock();
     }
 }
